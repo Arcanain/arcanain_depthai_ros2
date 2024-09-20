@@ -28,7 +28,8 @@ class OakDCameraNode(Node):
         self.device = dai.Device(pipeline)
 
         # Create a ROS2 publisher for the image data
-        self.image_pub = self.create_publisher(Image, '/image_raw', 3)
+        self.image_pub = self.create_publisher(Image, 'camera/image_raw', 3)
+
 
         # Create a timer to periodically get frames from the camera and publish them
         self.timer = self.create_timer(0.03, self.timer_callback)  # 30 FPS

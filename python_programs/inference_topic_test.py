@@ -107,7 +107,6 @@ class DepthAIDetector(Node):
             detections = inDet.detections
             print(detections)
 
-
             # TODO somehow I cant modify the data type from camera inference to massage
             
             '''
