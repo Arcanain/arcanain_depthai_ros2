@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 import os
 from glob import glob
 
-package_name = 'ROS2_OAKDlite_test'
+package_name = 'arcanain_depthai_ros2'
 
 setup(
     name=package_name,
