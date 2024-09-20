@@ -27,6 +27,7 @@ setup(
             'camera_node = python_programs.camera_node:main',
             'image_topic_test = python_programs.image_topic_test:main',
             'inference_topic_test = python_programs.inference_topic_test:main',
+            'inference2tuple_test = python_programs.inference2tuple_test:main',
 
         ],
     },
