@@ -106,6 +106,9 @@ class DepthAIDetector(Node):
         if inDet is not None:
             detections = inDet.detections
             print(detections)
+
+            # TODO somehow I cant modify the data type from camera inference to massage
+            
             '''
             detection_array = Detection2DArray()
             for detection in detections:
