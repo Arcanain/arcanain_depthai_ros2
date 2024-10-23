@@ -1,149 +1,230 @@
 #!/usr/bin/env python3
 
-import rclpy
-from rclpy.node import Node
-from sensor_msgs.msg import Image
-from vision_msgs.msg import Detection2D, Detection2DArray, ObjectHypothesisWithPose,BoundingBox2D
-from cv_bridge import CvBridge
+import sys
 import cv2
 import depthai as dai
 import numpy as np
-from pathlib import Path
-import sys
 import time
+import argparse
+import json
+import blobconverter
+from vision_msgs.msg import Detection2D, Detection2DArray, ObjectHypothesisWithPose, BoundingBox2D
+from pathlib import Path
+from std_msgs.msg import Header
 
-class DepthAIDetector(Node):
+import rclpy
+from rclpy.node import Node
+
+# tmp_path 
+tmp_path = str(Path(__file__).parent.parent.parent.parent.parent.parent.parent)
+package_name = 'arcanain_depthai_ros2'
+class YoloDetectionNode(Node):
     def __init__(self):
-        super().__init__('depthai_detector')
-        self.bridge = CvBridge()
-        self.image_pub = self.create_publisher(Image, '/image_Raw', 10)
-        self.detection_pub = self.create_publisher(Detection2DArray, '/Detections', 10)
+        super().__init__('yolo_detection_node')
         
-        # YOLOv4-tiny model path
-        nnPath = str((Path(__file__).parent / Path('models/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob')).resolve().absolute())
+        self.detection_publisher = self.create_publisher(Detection2DArray, 'detections', 10)
+
+
+        # parse command line 
+        parser = argparse.ArgumentParser()
+        # command line for <model>.blob 
+        parser.add_argument("-m", "--model", help="Provide model name or model path for inference",
+                            default=f"{tmp_path}/src/{package_name}/models/tiny-yolo-v4_openvino_2021.2_6shave.blob", type=str)
+        #yolov4_tiny_coco_416x416'
+        # command line for <config>.json
+        parser.add_argument("-c", "--config", help="Provide config path for inference",
+                            default=f"{tmp_path}/src/{package_name}/json/yolov4-tiny.json", type=str)
+        args, unknown = parser.parse_known_args()
+
+
+        # parse <config>.json
+        configPath = Path(args.config)
+        print("Config Path:", configPath)
+        print(str(Path(__file__).parent.parent.parent.parent.parent.parent))
+        print(str(Path(__file__).parent))
+        if not configPath.exists():
+            raise ValueError("Path {} does not exist!".format(configPath))
+
+        with configPath.open() as f:
+            config = json.load(f)
+        nnConfig = config.get("nn_config", {})
+
+        # 入力サイズの取得
+        if "input_size" in nnConfig:
+            W, H = tuple(map(int, nnConfig.get("input_size").split('x')))
+
+        # メタデータの取得
+        metadata = nnConfig.get("NN_specific_metadata", {})
+        classes = metadata.get("classes", {})
+        coordinates = metadata.get("coordinates", {})
+        anchors = metadata.get("anchors", {})
+        anchorMasks = metadata.get("anchor_masks", {})
+        iouThreshold = metadata.get("iou_threshold", {})
+        confidenceThreshold = metadata.get("confidence_threshold", {})
+
+        self.get_logger().info(str(metadata))
+
+        # ラベルの取得
+        nnMappings = config.get("mappings", {})
+        self.labels = nnMappings.get("labels", {})
+
+        # モデルのパスを取得
+        nnPath = args.model
         if not Path(nnPath).exists():
-            raise FileNotFoundError(f'Required file/s not found, please run "install_requirements.py"')
+            self.get_logger().info("No blob found at {}. Looking into DepthAI model zoo.".format(nnPath))
+            nnPath = str(blobconverter.from_zoo(args.model, shaves=6, zoo_type="depthai", use_cache=True))
 
-        # Tiny YOLOv4 label map
-        self.labelMap = [
-        "person",         "bicycle",    "car",           "motorbike",     "aeroplane",   "bus",           "train",
-        "truck",          "boat",       "traffic light", "fire hydrant",  "stop sign",   "parking meter", "bench",
-        "bird",           "cat",        "dog",           "horse",         "sheep",       "cow",           "elephant",
-        "bear",           "zebra",      "giraffe",       "backpack",      "umbrella",    "handbag",       "tie",
-        "suitcase",       "frisbee",    "skis",          "snowboard",     "sports ball", "kite",          "baseball bat",
-        "baseball glove", "skateboard", "surfboard",     "tennis racket", "bottle",      "wine glass",    "cup",
-        "fork",           "knife",      "spoon",         "bowl",          "banana",      "apple",         "sandwich",
-        "orange",         "broccoli",   "carrot",        "hot dog",       "pizza",       "donut",         "cake",
-        "chair",          "sofa",       "pottedplant",   "bed",           "diningtable", "toilet",        "tvmonitor",
-        "laptop",         "mouse",      "remote",        "keyboard",      "cell phone",  "microwave",     "oven",
-        "toaster",        "sink",       "refrigerator",  "book",          "clock",       "vase",          "scissors",
-        "teddy bear",     "hair drier", "toothbrush"
-        ]
+        # パイプラインの作成
+        pipeline = dai.Pipeline()
 
+        # ノードの定義
+        camRgb = pipeline.create(dai.node.ColorCamera)
+        detectionNetwork = pipeline.create(dai.node.YoloDetectionNetwork)
+        nnOut = pipeline.create(dai.node.XLinkOut)
 
-        syncNN = True
-
-        # Create pipeline
-        self.pipeline = dai.Pipeline()
-
-        # Define sources and outputs
-        self.camRgb = self.pipeline.create(dai.node.ColorCamera)
-        self.detectionNetwork = self.pipeline.create(dai.node.YoloDetectionNetwork)
-        xoutRgb = self.pipeline.create(dai.node.XLinkOut)
-        nnOut = self.pipeline.create(dai.node.XLinkOut)
-
-        xoutRgb.setStreamName("rgb")
         nnOut.setStreamName("nn")
 
-        # Properties
-        self.camRgb.setPreviewSize(416, 416)
-        self.camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
-        self.camRgb.setInterleaved(False)
-        self.camRgb.setColorOrder(dai.ColorCameraProperties.ColorOrder.BGR)
-        self.camRgb.setFps(30)
+        # プロパティの設定
+        camRgb.setPreviewSize(W, H)
+        camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
+        camRgb.setInterleaved(False)
+        camRgb.setColorOrder(dai.ColorCameraProperties.ColorOrder.BGR)
+        camRgb.setFps(40)
 
-        # Network specific settings
-        self.detectionNetwork.setConfidenceThreshold(0.5)
-        self.detectionNetwork.setNumClasses(80)
-        self.detectionNetwork.setCoordinateSize(4)
-        self.detectionNetwork.setAnchors([10, 14, 23, 27, 37, 58, 81, 82, 135, 169, 344, 319])
-        self.detectionNetwork.setAnchorMasks({"side26": [1, 2, 3], "side13": [3, 4, 5]})
-        self.detectionNetwork.setIouThreshold(0.5)
-        self.detectionNetwork.setBlobPath(nnPath)
-        self.detectionNetwork.setNumInferenceThreads(2)
-        self.detectionNetwork.input.setBlocking(False)
+        # ネットワークの設定
+        detectionNetwork.setConfidenceThreshold(confidenceThreshold)
+        detectionNetwork.setNumClasses(classes)
+        detectionNetwork.setCoordinateSize(coordinates)
+        detectionNetwork.setAnchors(anchors)
+        detectionNetwork.setAnchorMasks(anchorMasks)
+        detectionNetwork.setIouThreshold(iouThreshold)
+        detectionNetwork.setBlobPath(nnPath)
+        detectionNetwork.setNumInferenceThreads(2)
+        detectionNetwork.input.setBlocking(False)
 
-        # Linking
-        self.camRgb.preview.link(self.detectionNetwork.input)
-        if syncNN:
-            self.detectionNetwork.passthrough.link(xoutRgb.input)
-        else:
-            self.camRgb.preview.link(xoutRgb.input)
+        # ノード間の接続
+        camRgb.preview.link(detectionNetwork.input)
+        detectionNetwork.out.link(nnOut.input)
 
-        self.detectionNetwork.out.link(nnOut.input)
-
-        # Connect to device and start pipeline
-        self.device = dai.Device(self.pipeline)
-        self.qRgb = self.device.getOutputQueue(name="rgb", maxSize=4, blocking=False)
+        # デバイスへの接続とパイプラインの開始
+        self.device = dai.Device(pipeline)
         self.qDet = self.device.getOutputQueue(name="nn", maxSize=4, blocking=False)
 
         self.timer = self.create_timer(0.1, self.timer_callback)
 
-    def frameNorm(self, frame, bbox):
-        normVals = np.full(len(bbox), frame.shape[0])
-        normVals[::2] = frame.shape[1]
-        return (np.clip(np.array(bbox), 0, 1) * normVals).astype(int)
+        self.startTime = time.monotonic()
+        self.counter = 0
+
+    def detection_to_tuple(self, detection):
+        """
+        dai.Detectionオブジェクトをタプルに変換する関数。
+
+        Returns:
+        - tuple: (label: str, confidence: float, bbox: tuple(float, float, float, float))
+        """
+        # ラベル名の取得
+        label_id = detection.label
+        label_name = self.labels[label_id] if label_id < len(self.labels) else str(label_id)
+
+        # 信頼度の取得
+        confidence = detection.confidence  # 0.0 ~ 1.0
+
+        # バウンディングボックスの取得（正規化された座標：0.0 ~ 1.0）
+        xmin = detection.xmin
+        ymin = detection.ymin
+        xmax = detection.xmax
+        ymax = detection.ymax
+
+        # タプルにまとめる
+        detection_tuple = (
+            label_name,            # ラベル名（str）
+            confidence,            # 信頼度（float）
+            (xmin, ymin, xmax, ymax)  # バウンディングボックス座標（tuple of float）
+        )
+
+        return detection_tuple
 
     def timer_callback(self):
-        inRgb = self.qRgb.get()
-        inDet = self.qDet.get()
+        inDet = self.qDet.tryGet()
 
-        if inRgb is not None:
-            frame = inRgb.getCvFrame()
-            ros_image = self.bridge.cv2_to_imgmsg(frame, encoding="bgr8")
-            self.image_pub.publish(ros_image)
+        '''
+        if inDet is not None:
+            detections = inDet.detections
+            self.counter += 1
+            detection_tuples = []
+            for detection in detections:
+                # 検出結果をタプルに変換
+                detection_tuple = self.detection_to_tuple(detection)
+                detection_tuples.append(detection_tuple)
+
+            # ターミナルに出力
+            for dt in detection_tuples:
+                label_name, confidence, bbox = dt
+                self.get_logger().info(f"Label: {label_name}, Confidence: {confidence:.2f}")
+                self.get_logger().info(f"BBox: xmin={bbox[0]:.2f}, ymin={bbox[1]:.2f}, xmax={bbox[2]:.2f}, ymax={bbox[3]:.2f}")
+                self.get_logger().info("-" * 30)
+        '''
         
         if inDet is not None:
             detections = inDet.detections
-            print(detections)
+            detection_msg = Detection2DArray()
 
-            # TODO somehow I cant modify the data type from camera inference to massage
-            
-            '''
-            detection_array = Detection2DArray()
+            # ヘッダー情報の作成
+            header = Header()
+            header.stamp = self.get_clock().now().to_msg()
+            header.frame_id = "camera_frame"
+            detection_msg.header = header
+
             for detection in detections:
-                detection_msg = Detection2D()
-                bbox = self.frameNorm(frame, (detection.xmin, detection.ymin, detection.xmax, detection.ymax))
-                
-                detection_msg.bbox.size_x = float(bbox[2] - bbox[0])
-                detection_msg.bbox.size_y = float(bbox[3] - bbox[1])
+                detection2d = Detection2D()
 
-                # 修正箇所： center.x, center.y を position.x, position.y に変更
-                detection_msg.bbox.center.position.x = float((bbox[0] + bbox[2]) / 2)
-                detection_msg.bbox.center.position.y = float((bbox[1] + bbox[3]) / 2)
-                
-                # ObjectHypothesis インスタンスを作成して設定                
+                label_id = detection.label
+                label_name = self.labels[label_id]
+
+                # ラベル名と信頼度を設定
                 hypothesis = ObjectHypothesisWithPose()
-                print(dir(hypothesis))  # hypothesisオブジェクトの属性を表示
-                hypothesis.class_id= int(detection.label)
-                hypothesis.score = detection.confidence
-                
-                hypothesis_with_pose = ObjectHypothesisWithPose()
-                hypothesis_with_pose.hypothesis = hypothesis
+                hypothesis.hypothesis.class_id =  label_name#detection.label  # class_idはhypothesisの中にある
+                hypothesis.hypothesis.score = detection.confidence
+                detection2d.results.append(hypothesis)
 
-                detection_msg.results.append(hypothesis_with_pose)    
-                #detection_msg.results.append(hypothesis)
+                # バウンディングボックスを設定
+                bbox = BoundingBox2D()
+                bbox.center.position.x = (detection.xmin + detection.xmax) / 2
+                bbox.center.position.y = (detection.ymin + detection.ymax) / 2
+                bbox.size_x = detection.xmax - detection.xmin
+                bbox.size_y = detection.ymax - detection.ymin
+                detection2d.bbox = bbox
 
-                detection_array.detections.append(detection_msg)
-    '''
-        #self.detection_pub.publish(detections)
-        
+                detection_msg.detections.append(detection2d)
+
+            # 検出結果をトピックにパブリッシュ
+            self.detection_publisher.publish(detection_msg)
+
+            # ログの出力
+            for detection in detections:
+                label_id = label_name#detection.label
+                confidence = detection.confidence
+                xmin, ymin, xmax, ymax = detection.xmin, detection.ymin, detection.xmax, detection.ymax
+                self.get_logger().info(f"Label: {label_id}, Confidence: {confidence:.2f}")
+                self.get_logger().info(f"BBox: xmin={xmin:.2f}, ymin={ymin:.2f}, xmax={xmax:.2f}, ymax={ymax:.2f}")
+                self.get_logger().info("-" * 30)
+
+    def destroy_node(self):
+        super().destroy_node()
+        self.device.close()
+
 def main(args=None):
     rclpy.init(args=args)
-    node = DepthAIDetector()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+
+    node = YoloDetectionNode()
+
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

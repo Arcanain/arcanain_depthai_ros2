@@ -13,20 +13,31 @@ from pathlib import Path
 import rclpy
 from rclpy.node import Node
 
+# tmp_path 
+tmp_path = str(Path(__file__).parent.parent.parent.parent.parent.parent.parent)
+package_name = 'arcanain_depthai_ros2'
 class YoloDetectionNode(Node):
     def __init__(self):
         super().__init__('yolo_detection_node')
+        
 
-        # コマンドライン引数のパース
+        # parse command line 
         parser = argparse.ArgumentParser()
+        # command line for <model>.blob 
         parser.add_argument("-m", "--model", help="Provide model name or model path for inference",
-                            default='yolov4_tiny_coco_416x416', type=str)
+                            default=f"{tmp_path}/src/{package_name}/models/tiny-yolo-v4_openvino_2021.2_6shave.blob", type=str)
+        #yolov4_tiny_coco_416x416'
+        # command line for <config>.json
         parser.add_argument("-c", "--config", help="Provide config path for inference",
-                            default='json/yolov4-tiny.json', type=str)
+                            default=f"{tmp_path}/src/{package_name}/json/yolov4-tiny.json", type=str)
         args, unknown = parser.parse_known_args()
 
-        # 設定ファイルのパース
+
+        # parse <config>.json
         configPath = Path(args.config)
+        print("Config Path:", configPath)
+        print(str(Path(__file__).parent.parent.parent.parent.parent.parent))
+        print(str(Path(__file__).parent))
         if not configPath.exists():
             raise ValueError("Path {} does not exist!".format(configPath))
 
