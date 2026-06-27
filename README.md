@@ -13,11 +13,11 @@
 ## TASK
 **カメラの認識・起動を行う**
 - [ ] [このリポジトリ](https://github.com/Arcanain/arcanain_depthai_ros2/tree/main)をクローン
-- [ ] [記事](https://qiita.com/Nkn4ryu/items/3637e8454ddac6c7ed29)を参考にしてある程度理解
+- [ ] [①の記事](https://qiita.com/Nkn4ryu/items/3637e8454ddac6c7ed29)を参考にしてある程度理解
 
 
 **AIによる推論**
-- [ ] ②を参考にして一旦実行だけしてみてください
+- [ ] [②の記事](https://qiita.com/Nkn4ryu/items/e48db18556bca3354f90)を参考にして一旦実行だけしてみてください
 
 ここまでで，**動作確認**を行ってください．
 
