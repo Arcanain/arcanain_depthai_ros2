@@ -2,3 +2,6 @@ models/
 
 # モデルファイルを無視
 *.blob
+
+mailmap.txt
+.python-version
