@@ -1,80 +1,142 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
+
 import depthai as dai
-import cv2
 import numpy as np
+
 
 class OakDCameraNode(Node):
     def __init__(self):
         super().__init__('image_topic_test')
 
-        # Create a pipeline
-        pipeline = dai.Pipeline()
+        # -----------------------------
+        # DepthAI v3 pipeline
+        # -----------------------------
+        self.pipeline = dai.Pipeline()
 
-        # Create a color camera node
-        cam_rgb = pipeline.createColorCamera()
-        cam_rgb.setPreviewSize(320, 240)
-        cam_rgb.setInterleaved(False)
-        cam_rgb.setBoardSocket(dai.CameraBoardSocket.RGB)
-        cam_rgb.setFps(30)
+        # OAK-DのRGBカメラは通常CAM_A
+        self.cam_rgb = self.pipeline.create(dai.node.Camera).build(
+            dai.CameraBoardSocket.CAM_A
+        )
 
-        # Create an XLinkOut node for streaming the video to the host
-        xout_rgb = pipeline.createXLinkOut()
-        xout_rgb.setStreamName("rgb")
-        cam_rgb.preview.link(xout_rgb.input)
+        # 320×240、BGR、30 FPSで出力
+        # BGR888i: BGR interleaved
+        self.rgb_output = self.cam_rgb.requestOutput(
+            size=(320, 240),
+            type=dai.ImgFrame.Type.BGR888i,
+            fps=30,
+        )
 
-        # Initialize the device and start the pipeline
-        self.device = dai.Device(pipeline)
+        # DepthAI v3ではXLinkOutは作成しない
+        # ROSタイマーを止めないため、non-blocking queueにする
+        self.rgb_queue = self.rgb_output.createOutputQueue(4, False)
 
-        # Create a ROS2 publisher for the image data
-        self.image_pub = self.create_publisher(Image, 'camera/image_raw', 3)
+        # パイプライン開始
+        self.pipeline.start()
 
+        self.get_logger().info(
+            f'DepthAI version: {dai.__version__}'
+        )
+        self.get_logger().info(
+            'OAK-D RGB camera started: 320, 240, 30 FPS'
+        )
 
-        # Create a timer to periodically get frames from the camera and publish them
-        self.timer = self.create_timer(0.03, self.timer_callback)  # 30 FPS
+        # -----------------------------
+        # ROS 2 publisher
+        # -----------------------------
+        self.image_pub = self.create_publisher(
+            Image,
+            'camera/image_raw',
+            3,
+        )
+
+        # 約30 FPS
+        self.timer = self.create_timer(
+            1.0 / 30.0,
+            self.timer_callback,
+        )
 
     def timer_callback(self):
-        # Get frames from the device
-        in_rgb = self.device.getOutputQueue(name="rgb", maxSize=4, blocking=False).get()
+        # non-blockingで最新フレームを取得
+        in_rgb = self.rgb_queue.tryGet()
 
-        # Convert to OpenCV format
-        frame = in_rgb.getCvFrame()
+        # まだフレームが届いていない場合
+        if in_rgb is None:
+            return
 
-        # Convert the frame to a ROS Image message
-        msg = Image()# create Image type message in ROS2
-        msg.header.stamp = self.get_clock().now().to_msg() #time stamp of the message
-        '''!!! This time stamp is created when creating message, not when image captured !!!'''
+        try:
+            # DepthAI ImgFrame → OpenCV形式のBGR画像
+            frame = in_rgb.getCvFrame()
 
-        # image shape
-        msg.height = frame.shape[0]
-        msg.width = frame.shape[1]
+            # 念のため連続したメモリ配置にする
+            frame = np.ascontiguousarray(frame)
 
-        # encoding message
-        msg.encoding = 'bgr8'
+            # -----------------------------
+            # OpenCV frame → ROS Image
+            # -----------------------------
+            msg = Image()
 
-        msg.is_bigendian = False
+            # この時刻はROSメッセージ作成時刻
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.header.frame_id = 'oak_rgb_camera_optical_frame'
 
-        # byte per line ex)640 width -> 640*3(RGB) =1920 byte
-        msg.step = frame.shape[1] * 3
+            msg.height = frame.shape[0]
+            msg.width = frame.shape[1]
+            msg.encoding = 'bgr8'
+            msg.is_bigendian = False
 
-        # convert OpenCV frame to Numpy array
-        msg.data = np.array(frame).tobytes()
+            # 1行あたりのバイト数
+            msg.step = frame.strides[0]
 
-        # Publish the image message
-        self.image_pub.publish(msg)
+            # numpy配列をbytesに変換
+            msg.data = frame.tobytes()
+
+            self.image_pub.publish(msg)
+
+        except Exception as error:
+            self.get_logger().error(
+                f'Failed to process camera frame: {error}'
+            )
+
+    def stop_camera(self):
+        """DepthAI pipelineを停止する。"""
+        if hasattr(self, 'pipeline'):
+            try:
+                self.pipeline.stop()
+                self.pipeline.wait()
+            except Exception as error:
+                self.get_logger().warning(
+                    f'Failed to stop DepthAI pipeline cleanly: {error}'
+                )
+
 
 def main(args=None):
     rclpy.init(args=args)
-    oakd_camera_node = OakDCameraNode()
+
+    oakd_camera_node = None
 
     try:
+        oakd_camera_node = OakDCameraNode()
         rclpy.spin(oakd_camera_node)
+
     except KeyboardInterrupt:
         pass
 
-    oakd_camera_node.destroy_node()
-    rclpy.shutdown()
+    except Exception as error:
+        if oakd_camera_node is not None:
+            oakd_camera_node.get_logger().error(str(error))
+        else:
+            print(f'Failed to start OAK-D camera: {error}')
+
+    finally:
+        if oakd_camera_node is not None:
+            oakd_camera_node.stop_camera()
+            oakd_camera_node.destroy_node()
+
+        if rclpy.ok():
+            rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
