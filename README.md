@@ -23,3 +23,39 @@
 
 - [ ] それが全て問題なくできた（or問題が発生したが修正して，その原因がまとめられた）ら，　C++に書き換えてください．
 
+### 1. 依存関係
+
+必要パッケージのインストール
+
+```bash
+sudo apt update
+sudo apt install ros-humble-depthai
+```
+
+### 2. ビルドと起動
+
+```bash
+cd ~/ros2_ws
+source /opt/ros/humble/setup.bash
+colcon build --symlink-install --packages-select arcanain_depthai_ros2
+source install/setup.bash
+ros2 launch arcanain_depthai_ros2 inference.launch.py
+```
+
+### 3. 出力確認
+
+別ターミナルで推論結果を確認します。
+
+```bash
+source /opt/ros/humble/setup.bash
+source ~/ros2_ws/install/setup.bash
+ros2 topic echo /detections
+```
+
+検出枠付きカメラ画像を表示する場合：
+
+```bash
+source /opt/ros/humble/setup.bash
+source ~/ros2_ws/install/setup.bash
+ros2 run rqt_image_view rqt_image_view /detections/image
+```

@@ -1,0 +1,9 @@
+/**:
+  ros__parameters:
+    model: ~/.cache/blobconverter/yolov4_tiny_coco_416x416_openvino_2022.1_6shave.blob
+    detections_topic: detections
+    image_topic: detections/image
+    frame_id: camera_rgb_optical_frame
+    camera_fps: 30.0
+    # -1.0 uses the threshold from yolov4-tiny.json.
+    confidence_threshold: -1.0

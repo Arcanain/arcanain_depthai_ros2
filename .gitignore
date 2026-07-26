@@ -1,4 +1,7 @@
 models/
+__pycache__/
+*.py[cod]
+.pytest_cache/
 
 # モデルファイルを無視
 *.blob

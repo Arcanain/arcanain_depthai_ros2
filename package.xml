@@ -2,22 +2,28 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>arcanain_depthai_ros2</name>
-  <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="nkn4ryu@todo.todo">nkn4ryu</maintainer>
-  <license>TODO: License declaration</license>
+  <version>0.1.0</version>
+  <description>ROS 2 C++ node for OAK-D on-device neural-network inference.</description>
+  <maintainer email="shiryu.nakano03@gmail.com">shiryu nakano</maintainer>
+  <license>Apache-2.0</license>
 
-  <exec_depend>rclpy</exec_depend>
-  <exec_depend>sensor_msgs</exec_depend>
-  <exec_depend>vision_msgs</exec_depend>
-  <exec_depend>depthai</exec_depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <test_depend>ament_copyright</test_depend>
-  <test_depend>ament_flake8</test_depend>
-  <test_depend>ament_pep257</test_depend>
-  <test_depend>python3-pytest</test_depend>
+  <depend>cv_bridge</depend>
+  <depend>depthai</depend>
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>vision_msgs</depend>
+  <depend>yaml_cpp_vendor</depend>
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
 
   <export>
-    <build_type>ament_python</build_type>
+    <build_type>ament_cmake</build_type>
   </export>
 </package>
