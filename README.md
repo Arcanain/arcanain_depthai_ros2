@@ -44,7 +44,7 @@ ros2 launch arcanain_depthai_ros2 inference.launch.py
 
 ### 3. 出力確認
 
-別ターミナルで推論結果を確認します。
+別ターミナルで推論結果を確認
 
 ```bash
 source /opt/ros/humble/setup.bash
