@@ -35,6 +35,10 @@ ament_target_dependencies(
 target_link_libraries(inference_node depthai::core yaml-cpp ${OpenCV_LIBS})
 
 install(TARGETS inference_node DESTINATION lib/${PROJECT_NAME})
+install(PROGRAMS
+  scripts/ocr_node.py
+  DESTINATION lib/${PROJECT_NAME}
+)
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY config launch DESTINATION share/${PROJECT_NAME})
 install(FILES LICENSE DESTINATION share/${PROJECT_NAME})

@@ -1,0 +1,15 @@
+{
+  "nn_config": {
+    "input_size": "640x640",
+    "NN_specific_metadata": {
+      "classes": 1,
+      "iou_threshold": 0.5,
+      "confidence_threshold": 0.5
+    }
+  },
+  "mappings": {
+    "labels": [
+      "license plate"
+    ]
+  }
+}

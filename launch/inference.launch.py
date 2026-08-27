@@ -31,10 +31,9 @@ def generate_launch_description():
     """Create the on-device inference launch description."""
     package_share = Path(get_package_share_directory("arcanain_depthai_ros2"))
     default_parameters = package_share / "config" / "inference.yaml"
-    default_yolo_config = package_share / "config" / "yolov4-tiny.json"
+    default_yolo_config = package_share / "config" / "yolov8-license-plate.json"
     default_model = os.path.expanduser(
-        "~/.cache/blobconverter/"
-        "yolov4_tiny_coco_416x416_openvino_2022.1_6shave.blob"
+    "~/ros2_ws/output/plate_rvc2_blob_v2/best_v2.blob"
     )
 
     return LaunchDescription(

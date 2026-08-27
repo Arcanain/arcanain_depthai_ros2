@@ -1,4 +1,4 @@
-// Copyright 2026 shiryu nakano
+// Copyright 2026 Ippei Saito
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 
 #include <yaml-cpp/yaml.h>
 
-#include <map>
+//#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -36,9 +36,6 @@ struct YoloConfig
   int width;
   int height;
   int classes;
-  int coordinates;
-  std::vector<float> anchors;
-  std::map<std::string, std::vector<int>> anchor_masks;
   float iou_threshold;
   float confidence_threshold;
   std::vector<std::string> labels;
@@ -61,11 +58,20 @@ private:
 
   std::string frame_id_;
   std::vector<std::string> labels_;
+
+  int input_width_;
+  int input_height_;
+  float confidence_threshold_;
+  float iou_threshold_;
+
   std::shared_ptr<dai::Device> device_;
   std::shared_ptr<dai::DataOutputQueue> detection_queue_;
   std::shared_ptr<dai::DataOutputQueue> image_queue_;
+  std::vector<dai::ImgDetection> decode_yolov8(
+  const std::vector<float> & output) const;
   rclcpp::Publisher<vision_msgs::msg::Detection2DArray>::SharedPtr detection_publisher_;
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr image_publisher_;
+  rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr crop_publisher_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
 
