@@ -18,4 +18,9 @@ source install/setup.bash
 ros2 run rqt_image_view rqt_image_view /detections/image
 ```
 
+### （音声確認）
+```bash
+ros2 launch auto_sound auto_sound_launch.py use_rviz:=false
+```
+
 > **Note:** 1〜2はそれぞれ別ターミナルで実行する
