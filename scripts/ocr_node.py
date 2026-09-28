@@ -23,6 +23,24 @@ class OcrNode(Node):
     def __init__(self):
         super().__init__('plate_ocr_node')
 
+        input_topic = self.declare_parameter(
+            'input_topic', 'detections/crop'
+        ).value
+        output_topic = self.declare_parameter(
+            'output_topic', 'plate_number'
+        ).value
+        self.ocr_interval = self.declare_parameter(
+            'ocr_interval_sec', 2.0
+        ).value
+        self.confidence_threshold = self.declare_parameter(
+            'confidence_threshold', 0.95
+        ).value
+
+        if self.ocr_interval < 0.0:
+            raise ValueError('ocr_interval_sec must be greater than or equal to 0')
+        if not 0.0 <= self.confidence_threshold <= 1.0:
+            raise ValueError('confidence_threshold must be between 0 and 1')
+
         #self.bridge = CvBridge()
         self.reader = easyocr.Reader(
             ['en'],
@@ -32,22 +50,25 @@ class OcrNode(Node):
 
         self.subscription = self.create_subscription(
             Image,
-            '/detections/crop',
+            input_topic,
             self.image_callback,
             qos_profile_sensor_data
         )
 
         self.publisher = self.create_publisher(
             String,
-            '/plate_number',
+            output_topic,
             10
         )
 
-        # OCRは0.5秒に1回
-        self.ocr_interval = 2.0
         self.last_ocr_time = 0.0
 
-        self.get_logger().info('Plate OCR node started.')
+        self.get_logger().info(
+            'Plate OCR node started: '
+            f'input={input_topic}, output={output_topic}, '
+            f'interval={self.ocr_interval:.2f}s, '
+            f'confidence_threshold={self.confidence_threshold:.2f}'
+        )
 
     def image_callback(self, msg):
         now = time.monotonic()
@@ -101,7 +122,11 @@ class OcrNode(Node):
             text = best[1]
             confidence = float(best[2])
 
-            if confidence >= 0.95 and len(text) == 3 and text.isdigit():
+            if (
+                confidence >= self.confidence_threshold
+                and len(text) == 3
+                and text.isdigit()
+            ):
                 output.data = text
             else:
                 output.data = 'UNKNOWN'
@@ -129,4 +154,3 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-PY

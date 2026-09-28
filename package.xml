@@ -17,6 +17,7 @@
   <depend>vision_msgs</depend>
   <depend>yaml_cpp_vendor</depend>
 
+  <exec_depend>rclpy</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
 

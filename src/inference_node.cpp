@@ -45,6 +45,8 @@ InferenceNode::InferenceNode(const rclcpp::NodeOptions & options)
     declare_parameter<std::string>("detections_topic", "detections");
   const auto image_topic =
     declare_parameter<std::string>("image_topic", "detections/image");
+  const auto crop_topic =
+    declare_parameter<std::string>("crop_topic", "detections/crop");
   frame_id_ =
     declare_parameter<std::string>("frame_id", "camera_rgb_optical_frame");
   const auto camera_fps = declare_parameter<double>("camera_fps", 30.0);
@@ -85,7 +87,7 @@ InferenceNode::InferenceNode(const rclcpp::NodeOptions & options)
   rclcpp::SensorDataQoS().keep_last(1));
 
   crop_publisher_ = create_publisher<sensor_msgs::msg::Image>(
-  "/detections/crop",
+  crop_topic,
   rclcpp::SensorDataQoS().keep_last(1));
 
   dai::Pipeline pipeline;

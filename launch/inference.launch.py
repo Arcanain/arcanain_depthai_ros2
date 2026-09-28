@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-"""Launch OAK-D on-device YOLO inference."""
+"""Launch OAK-D on-device YOLO inference and plate OCR."""
 
 from pathlib import Path
 import os
@@ -33,7 +33,7 @@ def generate_launch_description():
     default_parameters = package_share / "config" / "inference.yaml"
     default_yolo_config = package_share / "config" / "yolov8-license-plate.json"
     default_model = os.path.expanduser(
-    "~/ros2_ws/output/plate_rvc2_blob_v2/best_v2.blob"
+        "~/ros2_ws/output/plate_rvc2_blob_v2/best_v2.blob"
     )
 
     return LaunchDescription(
@@ -74,6 +74,13 @@ def generate_launch_description():
                         ),
                     },
                 ],
+            ),
+            Node(
+                package="arcanain_depthai_ros2",
+                executable="ocr_node.py",
+                name="plate_ocr_node",
+                output="screen",
+                parameters=[LaunchConfiguration("params_file")],
             ),
         ]
     )
